@@ -385,7 +385,7 @@ function generateHTML(files) {
   html += '            </div>\n';
   html += '            ' + rows + '\n';
   html += '        </div>\n';
-  html += '        <footer>Powered by Cloudflare Worker | 支持拖拽上传和密码保护删除</footer>\n';
+  html += '        <footer>Powered by Cloudflare Worker | <a href="https://github.com/bslgw/file-hosting" target="_blank" style="color: orange; text-decoration: none;">@file-hosting</a></footer>\n';
   html += '    </div>\n';
   html += '    \n';
   html += '    \n';
