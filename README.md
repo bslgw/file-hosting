@@ -14,4 +14,5 @@
 
 txt，m3u 类型的文档可以直接在线编辑，编辑时需要输入的密码，密码就是上传时设置的密码
 
-<img width="986" height="479" alt="ScreenShot_2026-05-31_222027_016" src="https://github.com/user-attachments/assets/fb770d6c-d971-4c61-b979-37331b5b606b" />
+<img width="1006" height="530" alt="ScreenShot_2026-05-31_222027_016" src="https://github.com/user-attachments/assets/825cdbbc-7faf-42d9-8805-c0be0f8a4ea5" />
+
