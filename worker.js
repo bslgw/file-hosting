@@ -1,4 +1,25 @@
 // Cloudflare Worker - 文件上传与列表服务（带密码保护的删除功能 + 短链接 + 文件名后缀支持 + 在线编辑 + 并排UI/居中优化 + 无缝保存 + 独立进度条）
+// --- 時區修復代碼開始 ---
+const TIME_OFFSET = 8; // 設定你的時區偏移量，例如台北/北京是 8
+const NativeDate = globalThis.Date;
+
+// 劫持全局 Date 構造函數
+globalThis.Date = class extends NativeDate {
+  constructor(...args) {
+    if (args.length === 0) {
+      // 當調用 new Date() 時，自動加上偏移量
+      super(NativeDate.now() + TIME_OFFSET * 3600000);
+    } else {
+      super(...args);
+    }
+  }
+  
+  // 同步劫持 Date.now()
+  static now() {
+    return NativeDate.now() + TIME_OFFSET * 3600000;
+  }
+};
+// --- 時區修復代碼結束 ---
 
 export default {
   async fetch(request, env) {
@@ -310,7 +331,7 @@ function generateHTML(files) {
   html += '    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
   html += '    <title>文档托管</title>\n';
   html += '    <meta name="keywords" content="TXTT托管,M3U托管,文档托管,免费文件托管,免费TXT托管" />\n';
-	html += '    <meta name="description" content="部署在cloudflare上的免费且简单的文档托管" />\n';
+	html += '    <meta name="description" content="部署在cloudflare上的免费,简单的文档托管" />\n';
   html += '    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ace.js"></script>\n';
   html += '    <style>\n';
   html += '        * { margin: 0; padding: 0; box-sizing: border-box; }\n';
