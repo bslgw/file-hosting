@@ -5,4 +5,5 @@
 
 默认文件删除密码；888
 
-<img width="1034" height="597" alt="ScreenShot_2026-05-31_222027_016" src="https://github.com/user-attachments/assets/53d4442f-41fa-4195-beb2-fafed1f93165" />
+<img width="1034" height="597" alt="ScreenShot_2026-05-31_222027_016" src="https://github.com/user-attachments/assets/8394ea99-c0f7-4c63-9c13-6cddc6ca71c0" />
+
