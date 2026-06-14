@@ -1,6 +1,6 @@
 # 安装
 
-登录cloudflare.com
+登录 cloudflare.com
 
 新建 worker
 
