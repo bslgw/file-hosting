@@ -1,33 +1,39 @@
-// Cloudflare Worker - 文件上传与列表服务（带密码保护的删除功能）
+// Cloudflare Worker - 文件上传与列表服务（带密码保护的删除功能 + 短链接 + 文件名后缀支持）
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const method = request.method;
+    // 将路径按 '/' 拆分为数组，过滤掉空字符串
+    const pathParts = url.pathname.split('/').filter(Boolean);
 
-    // 处理上传请求
+    // 1. 处理上传请求
     if (method === 'POST' && url.pathname === '/upload') {
       return await handleUpload(request, env);
     }
 
-    // 处理文件下载/查看
-    if (method === 'GET' && url.pathname.startsWith('/file/')) {
-      return await handleDownload(request, env);
-    }
-
-    // 处理删除请求 - 需要验证密码
-    if (method === 'DELETE' && url.pathname.startsWith('/file/')) {
-      return await handleDelete(request, env);
-    }
-
-    // 处理主页
+    // 2. 处理主页和列表页
     if (method === 'GET' && (url.pathname === '/' || url.pathname === '/list')) {
       return await handleList(env);
+    }
+
+    // 3. 处理删除请求 (例如 DELETE /delete/abc1234)
+    if (method === 'DELETE' && pathParts[0] === 'delete' && pathParts[1]) {
+      return await handleDelete(request, env, pathParts[1]);
+    }
+
+    // 4. 处理文件下载/查看 (例如 GET /abc1234/filename.m3u)
+    // 只要是 GET 请求，且路径至少有一段内容，就去尝试读取文件
+    if (method === 'GET' && pathParts.length > 0) {
+      const fileKey = pathParts[0]; // 第一个部分就是短标识符
+      return await handleDownload(request, env, fileKey);
     }
 
     return new Response('Not Found', { status: 404 });
   }
 };
+
+// --- 核心处理函数 ---
 
 async function handleUpload(request, env) {
   try {
@@ -46,7 +52,9 @@ async function handleUpload(request, env) {
     const fileSize = file.size;
     const fileType = file.type;
     const timestamp = Date.now();
-    const fileKey = timestamp + '_' + fileName;
+    
+    // 生成 6 位随机数字和字母组合作为短标识符
+    const fileKey = generateShortId();
     
     const fileBuffer = await file.arrayBuffer();
     
@@ -101,10 +109,9 @@ async function handleUpload(request, env) {
   }
 }
 
-async function handleDelete(request, env) {
+async function handleDelete(request, env, fileKey) {
   try {
-    const url = new URL(request.url);
-    const fileKey = decodeURIComponent(url.pathname.slice(6));
+    const decodedKey = decodeURIComponent(fileKey);
     
     let body = {};
     try {
@@ -114,7 +121,7 @@ async function handleDelete(request, env) {
     }
     const inputPassword = body.password;
     
-    const fileData = await env.FILE_STORE.getWithMetadata(fileKey);
+    const fileData = await env.FILE_STORE.getWithMetadata(decodedKey);
     if (!fileData) {
       return new Response(JSON.stringify({ error: 'File not found' }), {
         status: 404,
@@ -135,10 +142,10 @@ async function handleDelete(request, env) {
     
     const indexKey = 'file_list';
     let fileList = await env.FILE_STORE.get(indexKey, { type: 'json' }) || [];
-    fileList = fileList.filter(item => item.key !== fileKey);
+    fileList = fileList.filter(item => item.key !== decodedKey);
     await env.FILE_STORE.put(indexKey, JSON.stringify(fileList));
     
-    await env.FILE_STORE.delete(fileKey);
+    await env.FILE_STORE.delete(decodedKey);
     
     return new Response(JSON.stringify({ 
       success: true, 
@@ -156,11 +163,9 @@ async function handleDelete(request, env) {
   }
 }
 
-async function handleDownload(request, env) {
-  const url = new URL(request.url);
-  const fileKey = decodeURIComponent(url.pathname.slice(6));
-  
-  const fileData = await env.FILE_STORE.getWithMetadata(fileKey, { type: 'stream' });
+async function handleDownload(request, env, fileKey) {
+  const decodedKey = decodeURIComponent(fileKey);
+  const fileData = await env.FILE_STORE.getWithMetadata(decodedKey, { type: 'stream' });
   
   if (!fileData || !fileData.value) {
     return new Response('File not found', { status: 404 });
@@ -175,9 +180,13 @@ async function handleDownload(request, env) {
     return fileName.toLowerCase().endsWith(ext);
   });
   
-  const headers = { 'Content-Type': fileType || 'application/octet-stream' };
+  const headers = { 
+    'Content-Type': fileType || 'application/octet-stream',
+    'Access-Control-Allow-Origin': '*'
+  };
   
   if (!isViewable) {
+    // 设置下载时的文件名为原始文件名，支持中文
     headers['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'' + encodeURIComponent(fileName);
   }
   
@@ -193,6 +202,56 @@ async function handleList(env) {
   });
 }
 
+// --- 辅助函数 ---
+
+function generateShortId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  // 生成 6 位随机字符
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  return date.getFullYear() + '-' + 
+    padZero(date.getMonth() + 1) + '-' + 
+    padZero(date.getDate()) + ' ' +
+    padZero(date.getHours()) + ':' +
+    padZero(date.getMinutes()) + ':' +
+    padZero(date.getSeconds());
+}
+
+function padZero(num) {
+  return num < 10 ? '0' + num : '' + num;
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function isViewableFile(fileName) {
+  const exts = ['.txt', '.json', '.m3u', '.m3u8', '.xml', '.html', '.css', '.js', '.md'];
+  for (let i = 0; i < exts.length; i++) {
+    if (fileName.toLowerCase().endsWith(exts[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// --- HTML 生成 ---
+
 function generateHTML(files) {
   let rows = '';
   
@@ -205,8 +264,13 @@ function generateHTML(files) {
     const hasPassword = file.hasPassword || false;
     
     const encodedKey = encodeURIComponent(file.key);
-    const viewLink = isView ? '<a href="/file/' + encodedKey + '" class="btn-view" target="_blank">查看</a>' : '';
-    const downloadLink = '<a href="/file/' + encodedKey + '" class="btn-download" download>下载</a>';
+    const encodedName = encodeURIComponent(file.originalName);
+    
+    // 生成新的 URL 格式: /短码/文件名
+    const fileUrl = '/' + encodedKey + '/' + encodedName;
+    
+    const viewLink = isView ? '<a href="' + fileUrl + '" class="btn-view" target="_blank">查看</a>' : '';
+    const downloadLink = '<a href="' + fileUrl + '" class="btn-download" download="' + escapeHtml(file.originalName) + '">下载</a>';
     const deleteLink = '<button class="btn-delete" data-key="' + escapeHtml(file.key) + '" data-name="' + escapeHtml(file.originalName) + '" data-has-password="' + hasPassword + '">删除</button>';
     
     rows += '<div class="file-item" data-key="' + escapeHtml(file.key) + '">' +
@@ -324,7 +388,7 @@ function generateHTML(files) {
   html += '        <footer>Powered by Cloudflare Worker | 支持拖拽上传和密码保护删除</footer>\n';
   html += '    </div>\n';
   html += '    \n';
-  html += '    <!-- 上传密码设置弹窗 -->\n';
+  html += '    \n';
   html += '    <div class="modal" id="passwordModal">\n';
   html += '        <div class="modal-content">\n';
   html += '            <h3>🔒 设置删除密码</h3>\n';
@@ -338,7 +402,7 @@ function generateHTML(files) {
   html += '        </div>\n';
   html += '    </div>\n';
   html += '    \n';
-  html += '    <!-- 删除密码验证弹窗 -->\n';
+  html += '    \n';
   html += '    <div class="modal" id="deletePasswordModal">\n';
   html += '        <div class="modal-content">\n';
   html += '            <h3>🔐 验证删除密码</h3>\n';
@@ -555,7 +619,8 @@ function generateHTML(files) {
   html += '            }\n';
   html += '            \n';
   html += '            try {\n';
-  html += '                const response = await fetch("/file/" + encodeURIComponent(key), {\n';
+  html += '                // 注意：这里更新为请求 /delete 路由\n';
+  html += '                const response = await fetch("/delete/" + encodeURIComponent(key), {\n';
   html += '                    method: "DELETE",\n';
   html += '                    headers: {\n';
   html += '                        "Content-Type": "application/json"\n';
@@ -590,40 +655,4 @@ function generateHTML(files) {
   html += '</html>';
   
   return html;
-}
-
-function formatTime(timestamp) {
-  const date = new Date(timestamp);
-  return date.getFullYear() + '-' + 
-    padZero(date.getMonth() + 1) + '-' + 
-    padZero(date.getDate()) + ' ' +
-    padZero(date.getHours()) + ':' +
-    padZero(date.getMinutes()) + ':' +
-    padZero(date.getSeconds());
-}
-
-function padZero(num) {
-  return num < 10 ? '0' + num : '' + num;
-}
-
-function formatSize(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function isViewableFile(fileName) {
-  const exts = ['.txt', '.json', '.m3u', '.m3u8', '.xml', '.html', '.css', '.js', '.md'];
-  for (let i = 0; i < exts.length; i++) {
-    if (fileName.toLowerCase().endsWith(exts[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
