@@ -309,6 +309,8 @@ function generateHTML(files) {
   let html = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n';
   html += '    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
   html += '    <title>文档托管</title>\n';
+  html += '    <meta name="keywords" content="TXTT托管,M3U托管,文档托管,免费文件托管,免费TXT托管" />\n';
+	html += '    <meta name="description" content="部署在cloudflare上的免费且简单的文档托管" />\n';
   html += '    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ace.js"></script>\n';
   html += '    <style>\n';
   html += '        * { margin: 0; padding: 0; box-sizing: border-box; }\n';
